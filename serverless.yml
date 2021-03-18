@@ -1,0 +1,63 @@
+service: payments-sls
+
+frameworkVersion: '2'
+
+provider:
+  name: aws
+  profile: your-profile
+  runtime: nodejs12.x
+  lambdaHashingVersion: 20201221
+  region: us-east-1
+  environment:
+    ACCOUNT_ID:
+      Ref: 'AWS::AccountId'
+    REGION:
+      Ref: 'AWS::Region'
+    NOTIFICATIONS_SNS:
+      Ref: NotificationsSNS
+    PAYMENTS_NOTIFICATIONS_QUEUE: 
+      Ref: PaymentsNotificationsQueue
+
+  iamRoleStatements:
+    - Effect: 'Allow'
+      Action:
+        - 'sns:*'
+      Resource:
+        - '*'
+    - Effect: 'Allow'
+      Action:
+        - 'sqs:SendMessage'
+      Resource:
+        - '*'
+
+functions:
+  notifications:
+    handler: notifications.handler
+    events:
+      - http:
+          path: /notifications
+          method: post
+          cors: true
+  paymentsNotifications:
+    handler: paymentsNotifications.handler
+    events:
+      - sns:
+          arn: !Ref NotificationsSNS
+          topicName: payment-notification-topic
+  processPaymentNotification:
+    handler: processPaymentNotification.handler
+    events:
+      - sqs:
+          arn: !GetAtt PaymentsNotificationsQueue.Arn
+          batchSize: 1
+
+resources:
+  Resources:
+    NotificationsSNS:
+      Type: "AWS::SNS::Topic"
+      Properties:
+        TopicName: payment-notification-topic
+    PaymentsNotificationsQueue:
+      Type: "AWS::SQS::Queue"
+      Properties: 
+        QueueName: "PaymentsNotificationsQueue"
